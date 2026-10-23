@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useCollection } from '@directus/composables';
 import { get } from 'lodash-es';
-import { computed } from 'vue';
+import { computed, toRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
 import VIcon from '@/components/v-icon/v-icon.vue';
@@ -10,6 +10,7 @@ import VListItemIcon from '@/components/v-list-item-icon.vue';
 import VListItem from '@/components/v-list-item.vue';
 import VList from '@/components/v-list.vue';
 import VMenu from '@/components/v-menu.vue';
+import { useRelationM2A } from '@/composables/use-relation-m2a';
 import { getLocalTypeForField } from '@/utils/get-local-type';
 import { getRelatedCollection } from '@/utils/get-related-collection';
 import { getItemRoute } from '@/utils/get-route';
@@ -73,7 +74,24 @@ const unit = computed(() => {
 	return null;
 });
 
+const { relationInfo: m2aRelationInfo } = useRelationM2A(toRef(props, 'collection'), toRef(props, 'field'));
+
 function getLinkForItem(item: any) {
+	if (localType.value === 'm2a') {
+		if (!m2aRelationInfo.value) return null;
+
+		const targetCollection = item[m2aRelationInfo.value.collectionField?.field];
+		if (!targetCollection) return null;
+
+		const pkField = m2aRelationInfo.value.relationPrimaryKeyFields?.[targetCollection]?.field ?? 'id';
+		const targetItem = item[m2aRelationInfo.value.junctionField?.field];
+
+		const targetPk = typeof targetItem === 'object' && targetItem !== null ? targetItem[pkField] : targetItem;
+		if (!targetPk) return null;
+
+		return getItemRoute(targetCollection, targetPk);
+	}
+
 	if (!relatedCollectionData.value || !primaryKeyFieldPath.value) return null;
 	const primaryKey = get(item, primaryKeyFieldPath.value);
 
@@ -107,7 +125,7 @@ function getLinkForItem(item: any) {
 						:collection="junctionCollection ?? relatedCollection"
 					/>
 				</VListItemContent>
-				<VListItemIcon>
+				<VListItemIcon v-if="getLinkForItem(item)">
 					<RouterLink :to="getLinkForItem(item)!"><VIcon name="launch" small /></RouterLink>
 				</VListItemIcon>
 			</VListItem>
